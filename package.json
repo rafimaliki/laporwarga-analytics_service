@@ -1,0 +1,25 @@
+{
+  "name": "laporwarga-analytics_service",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon --legacy-watch --exec bun src/index.ts",
+    "start": "bun src/index.ts",
+    "db:push": "bunx drizzle-kit push",
+    "db:migrate": "bunx drizzle-kit migrate ",
+    "db:generate": "bunx drizzle-kit generate "
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "drizzle": "^1.4.0",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.11.3",
+    "postgres": "^3.4.7"
+  }
+}
