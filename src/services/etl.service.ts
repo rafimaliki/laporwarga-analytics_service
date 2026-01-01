@@ -57,7 +57,7 @@ export async function ingestReport(report: any) {
       .onConflictDoNothing();
 
     // -----------------------------
-    // Bridge: Report ↔ Reporter
+    // Bridge: Report <-> Reporter
     // -----------------------------
     await tx
       .insert(bridgeReportReporter)
