@@ -8,7 +8,8 @@
     "start": "bun src/index.ts",
     "db:push": "bunx drizzle-kit push",
     "db:migrate": "bunx drizzle-kit migrate ",
-    "db:generate": "bunx drizzle-kit generate "
+    "db:generate": "bunx drizzle-kit generate ",
+    "db:seed": "bun run src/db/script/seed-dim.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -18,6 +19,7 @@
   },
   "dependencies": {
     "drizzle": "^1.4.0",
+    "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.3",
     "postgres": "^3.4.7"
