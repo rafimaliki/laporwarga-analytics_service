@@ -3,7 +3,7 @@ import { errorMiddleware } from "@/middlewares/error.middleware";
 import { loggerMiddleware } from "@/middlewares/logger.middleware";
 import { corsMiddleware } from "@/middlewares/cors.middleware";
 
-import { apiRoutes } from "./routes";
+import { apiRoutes } from "./routes/_index";
 
 const app = new Hono();
 
