@@ -125,6 +125,59 @@ export interface EscalationResponse {
 }
 
 // ============================================
+// SLA Compliance Types
+// ============================================
+
+export interface SLAComplianceData {
+  agency: string;
+  totalAssignedReports: number;
+  slaBreachedCount: number;
+  slaComplianceRate: number;
+}
+
+export interface SLAComplianceResponse {
+  data: SLAComplianceData[];
+  updatedAt: string;
+}
+
+// ============================================
+// MTTR by Type
+// ============================================
+
+export interface MTTRByTypeData {
+  reportType: string;
+  avgResolutionHours: number | null;
+  resolvedCount: number;
+  totalCount: number;
+}
+
+export interface MTTRByTypeResponse {
+  data: MTTRByTypeData[];
+  updatedAt: string;
+}
+
+// ============================================
+// Report Type Distribution
+// ============================================
+
+export interface ReportTypeDistributionData {
+  reportType: string;
+  submitted: number;
+  verified: number;
+  inProgress: number;
+  resolved: number;
+  rejected: number;
+  escalated: number;
+  total: number;
+}
+
+export interface ReportTypeDistributionResponse {
+  data: ReportTypeDistributionData[];
+  updatedAt: string;
+}
+
+
+// ============================================
 // Query Parameters
 // ============================================
 

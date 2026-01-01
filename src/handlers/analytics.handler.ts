@@ -91,4 +91,40 @@ export const analyticsHandler = {
       );
     }
   },
+  /**
+   * GET /api/analytics/sla-compliance
+   * Returns SLA compliance statistics
+   */
+  async getSLACompliance(c: Context) {
+    const params: DateRangeParams = {
+      startDate: c.req.query("startDate"),
+      endDate: c.req.query("endDate"),
+    };
+    const result = await analyticsService.getSLACompliance(params);
+    return c.json(result);
+  },
+  /**
+   * GET /api/analytics/mttr-by-type
+   * Returns MTTR by type statistics
+   */
+  async getMTTRByType(c: Context) {
+    const params: DateRangeParams = {
+      startDate: c.req.query("startDate"),
+      endDate: c.req.query("endDate"),
+    };
+    const result = await analyticsService.getMTTRByType(params);
+    return c.json(result);
+  },
+  /**
+   * GET /api/analytics/report-type-distribution
+   * Returns report type distribution statistics
+   */
+  async getReportTypeDistribution(c: Context) {
+    const params: DateRangeParams = {
+      startDate: c.req.query("startDate"),
+      endDate: c.req.query("endDate"),
+    };
+    const result = await analyticsService.getReportTypeDistribution(params);
+    return c.json(result);
+  },
 };

@@ -9,6 +9,7 @@ import {
   doublePrecision,
   primaryKey,
   uniqueIndex,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 /* =========================================================
@@ -19,16 +20,13 @@ import {
  * Dimension: Report Type
  * Enum-like dimension derived from ReportType union.
  */
-export const dimReportType = pgTable(
-  "dim_report_type",
-  {
-    reportTypeId: serial("report_type_id").primaryKey(),
-    name: text("name").notNull(),
-  },
-  (t) => ({
-    uqName: uniqueIndex("uq_dim_report_type_name").on(t.name),
-  })
-);
+export const dimReportType = pgTable("dim_report_type", {
+  reportTypeId: serial("report_type_id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  category: varchar("category", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 
 /**
  * Dimension: Visibility
@@ -99,19 +97,12 @@ export const dimAuthority = pgTable("dim_authority", {
  * Dimension: City
  * Indonesian cities with real coordinates for heatmap and analytics.
  */
-export const dimCity = pgTable(
-  "dim_city",
-  {
-    cityId: serial("city_id").primaryKey(),
-    name: text("name").notNull(),
-    province: text("province").notNull(),
-    centerLat: doublePrecision("center_lat").notNull(),
-    centerLng: doublePrecision("center_lng").notNull(),
-  },
-  (t) => ({
-    uqName: uniqueIndex("uq_dim_city_name").on(t.name),
-  })
-);
+export const dimCity = pgTable("dim_city", {
+  cityId: serial("city_id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  province: varchar("province", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 /* =========================================================
    FACT TABLES

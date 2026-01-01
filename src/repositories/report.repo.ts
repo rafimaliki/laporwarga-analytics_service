@@ -268,3 +268,220 @@ export async function getOverviewStats(
     rejectedReports: Number(row?.rejected_reports || 0),
   };
 }
+
+// ============================================
+// SLA Compliance Query
+// ============================================
+
+export interface SLAComplianceRow {
+  agency: string;
+  totalAssignedReports: number;
+  slaBreachedCount: number;
+  slaComplianceRate: number; // percentage (0-100)
+}
+
+export async function getSLAComplianceData(
+  filter: DateRangeFilter
+): Promise<SLAComplianceRow[]> {
+  const SLA_HOURS = 72; // Assumption: 72 hours SLA
+
+  const whereParts: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  if (filter.startDate) {
+    whereParts.push(`fr.created_at >= $${paramIndex}`);
+    params.push(filter.startDate);
+    paramIndex++;
+  }
+  if (filter.endDate) {
+    whereParts.push(`fr.created_at <= $${paramIndex}`);
+    params.push(filter.endDate);
+    paramIndex++;
+  }
+
+  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+  const result = await pgClient.unsafe(`
+    WITH report_resolution AS (
+      SELECT 
+        fr.report_id,
+        fr.authority_id,
+        fr.created_at,
+        (
+          SELECT MIN(fse.event_timestamp)
+          FROM fact_status_events fse
+          JOIN dim_status ds ON fse.status_id = ds.status_id
+          WHERE fse.report_id = fr.report_id AND ds.name = 'resolved'
+        ) as resolved_at
+      FROM fact_reports fr
+      ${whereClause}
+    ),
+    agency_sla AS (
+      SELECT
+        COALESCE(da.agency, 'Belum Ditugaskan') as agency,
+        COUNT(*) as total_assigned,
+        COUNT(
+          CASE 
+            WHEN rr.resolved_at IS NOT NULL 
+            AND EXTRACT(EPOCH FROM (rr.resolved_at - rr.created_at)) / 3600 > $${paramIndex}
+            THEN 1 
+          END
+        ) as sla_breached
+      FROM report_resolution rr
+      LEFT JOIN dim_authority da ON rr.authority_id = da.authority_id
+      WHERE rr.authority_id IS NOT NULL
+      GROUP BY agency
+    )
+    SELECT 
+      agency,
+      total_assigned,
+      sla_breached,
+      ROUND(((total_assigned - sla_breached)::numeric / NULLIF(total_assigned, 0) * 100), 2) as sla_compliance_rate
+    FROM agency_sla
+    WHERE agency != 'Belum Ditugaskan'
+    ORDER BY sla_compliance_rate DESC
+  `, [...params, SLA_HOURS]);
+
+  return result.map((row: any) => ({
+    agency: row.agency,
+    totalAssignedReports: Number(row.total_assigned),
+    slaBreachedCount: Number(row.sla_breached),
+    slaComplianceRate: Number(row.sla_compliance_rate || 0),
+  }));
+}
+
+// ============================================
+// MTTR (Mean Time To Resolution) by Type
+// ============================================
+
+export interface MTTRByTypeRow {
+  reportType: string;
+  avgResolutionHours: number | null;
+  resolvedCount: number;
+  totalCount: number;
+}
+
+export async function getMTTRByTypeData(
+  filter: DateRangeFilter
+): Promise<MTTRByTypeRow[]> {
+  const whereParts: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  if (filter.startDate) {
+    whereParts.push(`fr.created_at >= $${paramIndex}`);
+    params.push(filter.startDate);
+    paramIndex++;
+  }
+  if (filter.endDate) {
+    whereParts.push(`fr.created_at <= $${paramIndex}`);
+    params.push(filter.endDate);
+    paramIndex++;
+  }
+
+  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+  const result = await pgClient.unsafe(`
+    WITH report_resolution AS (
+      SELECT 
+        fr.report_id,
+        fr.report_type_id,
+        fr.created_at,
+        (
+          SELECT MIN(fse.event_timestamp)
+          FROM fact_status_events fse
+          JOIN dim_status ds ON fse.status_id = ds.status_id
+          WHERE fse.report_id = fr.report_id AND ds.name = 'resolved'
+        ) as resolved_at
+      FROM fact_reports fr
+      ${whereClause}
+    )
+    SELECT
+      drt.name as report_type,
+      COUNT(*) as total_count,
+      COUNT(rr.resolved_at) as resolved_count,
+      AVG(
+        CASE 
+          WHEN rr.resolved_at IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (rr.resolved_at - rr.created_at)) / 3600 
+        END
+      ) as avg_resolution_hours
+    FROM report_resolution rr
+    JOIN dim_report_type drt ON rr.report_type_id = drt.report_type_id
+    GROUP BY drt.name
+    ORDER BY avg_resolution_hours ASC NULLS LAST
+  `, params);
+
+  return result.map((row: any) => ({
+    reportType: row.report_type,
+    avgResolutionHours: row.avg_resolution_hours ? Number(row.avg_resolution_hours) : null,
+    resolvedCount: Number(row.resolved_count),
+    totalCount: Number(row.total_count),
+  }));
+}
+
+// ============================================
+// Distribusi Jenis Masalah (Stacked by Status)
+// ============================================
+
+export interface ReportTypeDistributionRow {
+  reportType: string;
+  submitted: number;
+  verified: number;
+  inProgress: number;
+  resolved: number;
+  rejected: number;
+  escalated: number;
+  total: number;
+}
+
+export async function getReportTypeDistributionData(
+  filter: DateRangeFilter
+): Promise<ReportTypeDistributionRow[]> {
+  const whereParts: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  if (filter.startDate) {
+    whereParts.push(`fr.created_at >= $${paramIndex}`);
+    params.push(filter.startDate);
+    paramIndex++;
+  }
+  if (filter.endDate) {
+    whereParts.push(`fr.created_at <= $${paramIndex}`);
+    params.push(filter.endDate);
+    paramIndex++;
+  }
+
+  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+  const result = await pgClient.unsafe(`
+    SELECT
+      drt.name as report_type,
+      COUNT(*) as total,
+      COUNT(CASE WHEN ds.name = 'submitted' THEN 1 END) as submitted,
+      COUNT(CASE WHEN ds.name = 'verified' THEN 1 END) as verified,
+      COUNT(CASE WHEN ds.name = 'in_progress' THEN 1 END) as in_progress,
+      COUNT(CASE WHEN ds.name = 'resolved' THEN 1 END) as resolved,
+      COUNT(CASE WHEN ds.name = 'rejected' THEN 1 END) as rejected,
+      COUNT(CASE WHEN ds.name = 'escalated' THEN 1 END) as escalated
+    FROM fact_reports fr
+    JOIN dim_report_type drt ON fr.report_type_id = drt.report_type_id
+    JOIN dim_status ds ON fr.current_status_id = ds.status_id
+    ${whereClause}
+    GROUP BY drt.name
+    ORDER BY total DESC
+  `, params);
+
+  return result.map((row: any) => ({
+    reportType: row.report_type,
+    submitted: Number(row.submitted),
+    verified: Number(row.verified),
+    inProgress: Number(row.in_progress),
+    resolved: Number(row.resolved),
+    rejected: Number(row.rejected),
+    escalated: Number(row.escalated),
+    total: Number(row.total),
+  }));
+}

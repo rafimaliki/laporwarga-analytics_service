@@ -15,4 +15,13 @@ analyticsRoutes.get("/escalation", analyticsHandler.getEscalation);
 // GET /api/analytics/overview?startDate=&endDate=
 analyticsRoutes.get("/overview", analyticsHandler.getOverview);
 
+// GET /api/analytics/sla-compliance?startDate=&endDate=
+analyticsRoutes.get("/sla-compliance", analyticsHandler.getSLACompliance);
+
+// GET /api/analytics/mttr-by-type?startDate=&endDate=
+analyticsRoutes.get("/mttr-by-type", analyticsHandler.getMTTRByType);
+
+// GET /api/analytics/report-type-distribution?startDate=&endDate=
+analyticsRoutes.get("/report-type-distribution", analyticsHandler.getReportTypeDistribution);
+
 export { analyticsRoutes };

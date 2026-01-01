@@ -8,12 +8,18 @@ import type {
   EscalationTrend,
   EscalationResponse,
   DateRangeParams,
+  SLAComplianceResponse,
+  MTTRByTypeResponse,
+  ReportTypeDistributionResponse,
 } from "@/types/analytics.types";
 import {
   getHeatmapData,
   getRankingData,
   getEscalationData,
   getOverviewStats,
+  getSLAComplianceData,
+  getMTTRByTypeData,
+  getReportTypeDistributionData,
   type DateRangeFilter,
 } from "@/repositories/report.repo";
 
@@ -224,6 +230,32 @@ export const analyticsService = {
     const stats = await getOverviewStats(filter);
     return {
       ...stats,
+      updatedAt: new Date().toISOString(),
+    };
+  },
+   async getSLACompliance(params: DateRangeParams): Promise<SLAComplianceResponse> {
+    const filter = toDateFilter(params);
+    const data = await getSLAComplianceData(filter);
+    return {
+      data,
+      updatedAt: new Date().toISOString(),
+    };
+  },
+
+  async getMTTRByType(params: DateRangeParams): Promise<MTTRByTypeResponse> {
+    const filter = toDateFilter(params);
+    const data = await getMTTRByTypeData(filter);
+    return {
+      data,
+      updatedAt: new Date().toISOString(),
+    };
+  },
+
+  async getReportTypeDistribution(params: DateRangeParams): Promise<ReportTypeDistributionResponse> {
+    const filter = toDateFilter(params);
+    const data = await getReportTypeDistributionData(filter);
+    return {
+      data,
       updatedAt: new Date().toISOString(),
     };
   },
