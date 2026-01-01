@@ -11,6 +11,48 @@ The service uses PostgreSQL as its database.
 - **Password**: password
 - **Host Port**: 5433 (mapped to container port 5432)
 
+## Database Initialization
+
+### First Time Setup
+
+1. Start the containers:
+
+   ```bash
+   docker compose up -d
+   ```
+
+2. Exec into the backend container:
+
+   ```bash
+   docker exec -it analytics_be bash
+   ```
+
+3. Inside the container, push the schema to the database (first time only):
+
+   ```bash
+   bun run db:push
+   ```
+
+4. Seed the database with initial data (first time only):
+   ```bash
+   bun run db:seed
+   ```
+
+### On Schema Changes
+
+When you modify the schema in `src/db/schema.ts`, push the changes:
+
+1. Exec into the backend container:
+
+   ```bash
+   docker exec -it analytics_be bash
+   ```
+
+2. Run:
+   ```bash
+   bun run db:push
+   ```
+
 ## Running the Service
 
 To run the service using Docker Compose:
