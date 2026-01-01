@@ -73,4 +73,22 @@ export const analyticsHandler = {
       );
     }
   },
+
+  /**
+   * GET /api/analytics/overview
+   * Returns dashboard overview statistics
+   */
+  getOverview: async (c: Context) => {
+    try {
+      const params = parseDateParams(c);
+      const data = await analyticsService.getOverview(params);
+      return c.json(data);
+    } catch (error) {
+      console.error("Error fetching overview:", error);
+      return c.json(
+        { error: "Failed to fetch overview data", message: String(error) },
+        500
+      );
+    }
+  },
 };

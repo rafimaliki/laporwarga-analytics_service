@@ -1,5 +1,4 @@
 import type {
-  RawReport,
   RankingData,
   RankingResponse,
   HeatmapPoint,
@@ -10,37 +9,23 @@ import type {
   EscalationResponse,
   DateRangeParams,
 } from "@/types/analytics.types";
+import {
+  getHeatmapData,
+  getRankingData,
+  getEscalationData,
+  getOverviewStats,
+  type DateRangeFilter,
+} from "@/repositories/report.repo";
 
 // ============================================
-// Report Service Client
+// Helper: Convert params to filter
 // ============================================
 
-async function fetchReports(): Promise<RawReport[]> {
-  const response = await fetch(`${process.env.REPORT_SERVICE_URL}/reports/list`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch reports: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-// ============================================
-// Date Filtering Helper
-// ============================================
-
-function filterByDateRange(reports: RawReport[], params: DateRangeParams): RawReport[] {
-  let filtered = reports;
-
-  if (params.startDate) {
-    const start = new Date(params.startDate);
-    filtered = filtered.filter((r) => new Date(r.created_at) >= start);
-  }
-
-  if (params.endDate) {
-    const end = new Date(params.endDate);
-    filtered = filtered.filter((r) => new Date(r.created_at) <= end);
-  }
-
-  return filtered;
+function toDateFilter(params: DateRangeParams): DateRangeFilter {
+  return {
+    startDate: params.startDate ? new Date(params.startDate) : undefined,
+    endDate: params.endDate ? new Date(params.endDate) : undefined,
+  };
 }
 
 // ============================================
@@ -56,67 +41,21 @@ const TYPE_MAPPING: Record<string, string> = {
 };
 
 // ============================================
-// Ranking Calculation
+// Ranking Calculation (from DB data)
 // ============================================
 
-function calculateRankingData(reports: RawReport[]): RankingData[] {
+function calculateRankingFromDb(
+  rows: Awaited<ReturnType<typeof getRankingData>>
+): RankingData[] {
   const SLA_HOURS = 72;
 
-  // Group by agency
-  const agencyMap = new Map<
-    string,
-    {
-      totalReports: number;
-      resolvedReports: number;
-      totalResolutionHours: number;
-      slaBreached: number;
-    }
-  >();
-
-  reports.forEach((report) => {
-    const agency = report.authority.assigned_agency || "Belum Ditugaskan";
-
-    if (!agencyMap.has(agency)) {
-      agencyMap.set(agency, {
-        totalReports: 0,
-        resolvedReports: 0,
-        totalResolutionHours: 0,
-        slaBreached: 0,
-      });
-    }
-
-    const stats = agencyMap.get(agency)!;
-    stats.totalReports++;
-
-    // Calculate resolution time if resolved
-    if (report.status.current === "resolved") {
-      stats.resolvedReports++;
-      const created = new Date(report.created_at);
-      const resolved = new Date(report.status.updated_at);
-      const hours = (resolved.getTime() - created.getTime()) / (1000 * 60 * 60);
-      stats.totalResolutionHours += hours;
-
-      if (hours > SLA_HOURS) {
-        stats.slaBreached++;
-      }
-    }
-  });
-
-  // Calculate scores and create ranking
-  const rankingData: RankingData[] = [];
-
-  agencyMap.forEach((stats, agencyName) => {
-    if (agencyName === "Belum Ditugaskan") return;
-
-    const avgResolutionHours =
-      stats.resolvedReports > 0
-        ? stats.totalResolutionHours / stats.resolvedReports
-        : 0;
+  const rankingData: RankingData[] = rows.map((row) => {
+    const avgResolutionHours = row.avgResolutionHours || 0;
 
     // Score formula: 100 - (SLA breach rate penalty) - (resolution time penalty)
     const slaBreachRate =
-      stats.totalReports > 0
-        ? (stats.slaBreached / stats.totalReports) * 100
+      row.totalReports > 0
+        ? (row.slaBreachedCount / row.totalReports) * 100
         : 0;
     const resolutionPenalty = Math.min((avgResolutionHours / SLA_HOURS) * 20, 30);
     const score = Math.max(
@@ -124,14 +63,14 @@ function calculateRankingData(reports: RawReport[]): RankingData[] {
       Math.round(100 - slaBreachRate * 0.3 - resolutionPenalty)
     );
 
-    rankingData.push({
+    return {
       rank: 0,
-      agencyName,
-      slaBreachedCount: stats.slaBreached,
+      agencyName: row.agency,
+      slaBreachedCount: row.slaBreachedCount,
       avgResolutionTimeHours: Math.round(avgResolutionHours * 10) / 10,
-      totalReports: stats.totalReports,
+      totalReports: row.totalReports,
       score,
-    });
+    };
   });
 
   // Sort by score and assign ranks
@@ -144,41 +83,47 @@ function calculateRankingData(reports: RawReport[]): RankingData[] {
 }
 
 // ============================================
-// Heatmap Calculation
+// Heatmap Calculation (from DB data)
 // ============================================
 
-function calculateHeatmapData(reports: RawReport[]): HeatmapResponse {
-  const points: HeatmapPoint[] = reports.map((report) => ({
-    id: report.report_id,
-    latitude: report.location.latitude,
-    longitude: report.location.longitude,
-    type: TYPE_MAPPING[report.type] || "Lainnya",
-    intensity: Math.min(report.votes.upvote_count / 10, 1),
-  }));
+function calculateHeatmapFromDb(
+  rows: Awaited<ReturnType<typeof getHeatmapData>>
+): HeatmapResponse {
+  const points: HeatmapPoint[] = rows
+    .filter((row) => row.latitude !== null && row.longitude !== null)
+    .map((row) => ({
+      id: row.reportId,
+      latitude: row.latitude!,
+      longitude: row.longitude!,
+      type: TYPE_MAPPING[row.reportType] || "Lainnya",
+      intensity: Math.min(row.upvoteCount / 10, 1),
+    }));
 
   // Simple clustering by grid (~1km)
   const gridSize = 0.01;
   const clusterMap = new Map<string, HeatmapCluster>();
 
-  reports.forEach((report) => {
-    const gridLat = Math.round(report.location.latitude / gridSize) * gridSize;
-    const gridLng = Math.round(report.location.longitude / gridSize) * gridSize;
-    const key = `${gridLat.toFixed(4)},${gridLng.toFixed(4)}`;
-    const type = TYPE_MAPPING[report.type] || "Lainnya";
+  rows
+    .filter((row) => row.latitude !== null && row.longitude !== null)
+    .forEach((row) => {
+      const gridLat = Math.round(row.latitude! / gridSize) * gridSize;
+      const gridLng = Math.round(row.longitude! / gridSize) * gridSize;
+      const key = `${gridLat.toFixed(4)},${gridLng.toFixed(4)}`;
+      const type = TYPE_MAPPING[row.reportType] || "Lainnya";
 
-    if (!clusterMap.has(key)) {
-      clusterMap.set(key, {
-        latitude: gridLat,
-        longitude: gridLng,
-        count: 0,
-        types: {},
-      });
-    }
+      if (!clusterMap.has(key)) {
+        clusterMap.set(key, {
+          latitude: gridLat,
+          longitude: gridLng,
+          count: 0,
+          types: {},
+        });
+      }
 
-    const cluster = clusterMap.get(key)!;
-    cluster.count++;
-    cluster.types[type] = (cluster.types[type] || 0) + 1;
-  });
+      const cluster = clusterMap.get(key)!;
+      cluster.count++;
+      cluster.types[type] = (cluster.types[type] || 0) + 1;
+    });
 
   const clusters = Array.from(clusterMap.values()).filter((c) => c.count > 1);
 
@@ -186,41 +131,21 @@ function calculateHeatmapData(reports: RawReport[]): HeatmapResponse {
 }
 
 // ============================================
-// Escalation Calculation
+// Escalation Calculation (from DB data)
 // ============================================
 
-function calculateEscalationData(reports: RawReport[]): EscalationResponse {
-  const totalReports = reports.length;
+function calculateEscalationFromDb(
+  rows: Awaited<ReturnType<typeof getEscalationData>>
+): EscalationResponse {
+  // Calculate totals
+  let totalReports = 0;
   let totalEscalated = 0;
   let totalRejected = 0;
 
-  // Monthly trends
-  const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-  const monthlyData = new Map<string, { escalated: number; rejected: number; resolved: number }>();
-
-  reports.forEach((report) => {
-    const date = new Date(report.created_at);
-    const monthKey = months[date.getMonth()];
-
-    if (!monthlyData.has(monthKey)) {
-      monthlyData.set(monthKey, { escalated: 0, rejected: 0, resolved: 0 });
-    }
-
-    const monthStats = monthlyData.get(monthKey)!;
-
-    if (report.escalation.is_escalated) {
-      totalEscalated++;
-      monthStats.escalated++;
-    }
-
-    if (report.status.current === "rejected") {
-      totalRejected++;
-      monthStats.rejected++;
-    }
-
-    if (report.status.current === "resolved") {
-      monthStats.resolved++;
-    }
+  rows.forEach((row) => {
+    totalReports += row.totalReports;
+    totalEscalated += row.escalatedCount;
+    totalRejected += row.rejectedCount;
   });
 
   const stats: EscalationStats = {
@@ -237,19 +162,29 @@ function calculateEscalationData(reports: RawReport[]): EscalationResponse {
     totalReports,
   };
 
-  // Get last 8 months of trends
-  const currentMonth = new Date().getMonth();
-  const trends: EscalationTrend[] = [];
+  // Map month abbreviations for Indonesian locale
+  const monthMap: Record<string, string> = {
+    Jan: "Jan",
+    Feb: "Feb",
+    Mar: "Mar",
+    Apr: "Apr",
+    May: "Mei",
+    Jun: "Jun",
+    Jul: "Jul",
+    Aug: "Agu",
+    Sep: "Sep",
+    Oct: "Okt",
+    Nov: "Nov",
+    Dec: "Des",
+  };
 
-  for (let i = 7; i >= 0; i--) {
-    const monthIndex = (currentMonth - i + 12) % 12;
-    const monthKey = months[monthIndex];
-    const data = monthlyData.get(monthKey) || { escalated: 0, rejected: 0, resolved: 0 };
-    trends.push({
-      period: monthKey,
-      ...data,
-    });
-  }
+  // Get last 8 months of trends (already ordered by DB)
+  const trends: EscalationTrend[] = rows.slice(0, 8).reverse().map((row) => ({
+    period: monthMap[row.month] || row.month,
+    escalated: row.escalatedCount,
+    rejected: row.rejectedCount,
+    resolved: row.resolvedCount,
+  }));
 
   return {
     stats,
@@ -264,23 +199,32 @@ function calculateEscalationData(reports: RawReport[]): EscalationResponse {
 
 export const analyticsService = {
   async getRanking(params: DateRangeParams): Promise<RankingResponse> {
-    const reports = await fetchReports();
-    const filtered = filterByDateRange(reports, params);
+    const filter = toDateFilter(params);
+    const rows = await getRankingData(filter);
     return {
-      data: calculateRankingData(filtered),
+      data: calculateRankingFromDb(rows),
       updatedAt: new Date().toISOString(),
     };
   },
 
   async getHeatmap(params: DateRangeParams): Promise<HeatmapResponse> {
-    const reports = await fetchReports();
-    const filtered = filterByDateRange(reports, params);
-    return calculateHeatmapData(filtered);
+    const filter = toDateFilter(params);
+    const rows = await getHeatmapData(filter);
+    return calculateHeatmapFromDb(rows);
   },
 
   async getEscalation(params: DateRangeParams): Promise<EscalationResponse> {
-    const reports = await fetchReports();
-    const filtered = filterByDateRange(reports, params);
-    return calculateEscalationData(filtered);
+    const filter = toDateFilter(params);
+    const rows = await getEscalationData(filter);
+    return calculateEscalationFromDb(rows);
+  },
+
+  async getOverview(params: DateRangeParams) {
+    const filter = toDateFilter(params);
+    const stats = await getOverviewStats(filter);
+    return {
+      ...stats,
+      updatedAt: new Date().toISOString(),
+    };
   },
 };

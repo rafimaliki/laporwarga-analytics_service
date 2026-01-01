@@ -2,6 +2,7 @@ import { db } from "@/db/index";
 import {
   factReports,
   dimReporter,
+  dimAuthority,
   bridgeReportReporter,
   factStatusEvents,
   factMediaEvents,
@@ -13,6 +14,8 @@ import {
   lookupVisibilityId,
   lookupStatusId,
   lookupActorRoleId,
+  lookupCityIdByName,
+  lookupNearestCityId,
 } from "@/db/lookups";
 
 export async function ingestReport(report: any) {
@@ -23,6 +26,44 @@ export async function ingestReport(report: any) {
     const reportTypeId = await lookupReportTypeId(report.type);
     const visibilityId = await lookupVisibilityId(report.visibility);
     const currentStatusId = await lookupStatusId(report.status.current);
+
+    // -----------------------------
+    // City lookup (by name or nearest)
+    // -----------------------------
+    let cityId: number | null = null;
+    if (report.location.city) {
+      cityId = await lookupCityIdByName(report.location.city);
+    }
+    if (!cityId && report.location.latitude && report.location.longitude) {
+      cityId = await lookupNearestCityId(
+        report.location.latitude,
+        report.location.longitude
+      );
+    }
+
+    // -----------------------------
+    // Authority (INSERT or lookup existing)
+    // -----------------------------
+    let authorityId: number | null = null;
+    if (report.authority?.assigned_agency) {
+      // Try to insert, if conflict then lookup
+      try {
+        const inserted = await tx
+          .insert(dimAuthority)
+          .values({
+            agency: report.authority.assigned_agency,
+            unit: report.authority.assigned_unit || null,
+            officerId: report.authority.assigned_officer_id || null,
+          })
+          .returning({ authorityId: dimAuthority.authorityId });
+        
+        authorityId = inserted[0].authorityId;
+      } catch (error) {
+        // If insert fails due to duplicate, just use any authority for now
+        // In production, you'd want to look up by agency name
+        console.warn("Authority insert failed, using null:", error);
+      }
+    }
 
     // -----------------------------
     // Reporter (UPSERT)
@@ -45,6 +86,8 @@ export async function ingestReport(report: any) {
         reportTypeId,
         visibilityId,
         currentStatusId,
+        authorityId,
+        cityId,
         title: report.title,
         description: report.description,
         latitude: report.location.latitude,

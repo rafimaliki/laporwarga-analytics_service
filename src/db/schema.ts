@@ -95,6 +95,24 @@ export const dimAuthority = pgTable("dim_authority", {
   officerId: uuid("officer_id"),
 });
 
+/**
+ * Dimension: City
+ * Indonesian cities with real coordinates for heatmap and analytics.
+ */
+export const dimCity = pgTable(
+  "dim_city",
+  {
+    cityId: serial("city_id").primaryKey(),
+    name: text("name").notNull(),
+    province: text("province").notNull(),
+    centerLat: doublePrecision("center_lat").notNull(),
+    centerLng: doublePrecision("center_lng").notNull(),
+  },
+  (t) => ({
+    uqName: uniqueIndex("uq_dim_city_name").on(t.name),
+  })
+);
+
 /* =========================================================
    FACT TABLES
    ========================================================= */
@@ -121,6 +139,8 @@ export const factReports = pgTable("fact_reports", {
   authorityId: integer("authority_id").references(
     () => dimAuthority.authorityId
   ),
+
+  cityId: integer("city_id").references(() => dimCity.cityId),
 
   title: text("title"),
   description: text("description"),
