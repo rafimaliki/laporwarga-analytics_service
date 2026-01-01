@@ -29,6 +29,9 @@ services:
       PORT: 5000
       NODE_ENV: development
       DATABASE_URL: postgres://postgres:password@analytics_db:5432/analytics_db
+      REPORT_SERVICE_URL: http://host.docker.internal:5001/api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - analytics_network
 
