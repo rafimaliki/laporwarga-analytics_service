@@ -3,7 +3,7 @@ import { reportsService } from "@/services/report.service";
 import { ingestReport } from "@/services/etl.service";
 
 export const etlHandler = {
-  list: async (c: Context) => {
+  run: async (c: Context) => {
     try {
       console.log("Fetching reports...");
       const reports = (await reportsService.list()) as any[];

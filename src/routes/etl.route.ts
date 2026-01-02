@@ -3,6 +3,7 @@ import { etlHandler } from "@/handlers/etl.handler";
 
 const etlRoutes = new Hono();
 
-etlRoutes.post("/run", etlHandler.list);
+// POST /api/etl/run
+etlRoutes.post("/run", etlHandler.run);
 
 export { etlRoutes };
