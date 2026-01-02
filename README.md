@@ -65,7 +65,7 @@ The service will be available on port 5000.
 
 ## Triggering ETL
 
-To trigger the ETL process, send a POST request to the `/api/etl/trigger` endpoint:
+To trigger the ETL process, send a POST request to the `/api/etl/run` endpoint:
 
 ```bash
 curl -X POST http://localhost:5000/api/etl/run
