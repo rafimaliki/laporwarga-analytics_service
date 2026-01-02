@@ -22,6 +22,12 @@ analyticsRoutes.get("/sla-compliance", analyticsHandler.getSLACompliance);
 analyticsRoutes.get("/mttr-by-type", analyticsHandler.getMTTRByType);
 
 // GET /api/analytics/report-type-distribution?startDate=&endDate=
-analyticsRoutes.get("/report-type-distribution", analyticsHandler.getReportTypeDistribution);
+analyticsRoutes.get(
+  "/report-type-distribution",
+  analyticsHandler.getReportTypeDistribution
+);
+
+// GET /api/analytics/recent-reports?count=
+analyticsRoutes.get("/recent-reports", analyticsHandler.getRecentReports);
 
 export { analyticsRoutes };

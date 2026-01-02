@@ -21,6 +21,7 @@ import {
   getMTTRByTypeData,
   getReportTypeDistributionData,
   type DateRangeFilter,
+  getRecentReports,
 } from "@/repositories/report.repo";
 
 // ============================================
@@ -272,5 +273,10 @@ export const analyticsService = {
       data,
       updatedAt: new Date().toISOString(),
     };
+  },
+
+  async getRecentReports(count: number) {
+    const reports = await getRecentReports(count);
+    return reports;
   },
 };

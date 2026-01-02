@@ -127,4 +127,18 @@ export const analyticsHandler = {
     const result = await analyticsService.getReportTypeDistribution(params);
     return c.json(result);
   },
+
+  getRecentReports: async (c: Context) => {
+    try {
+      const limit = parseInt(c.req.query("limit") || "10", 10);
+      const data = await analyticsService.getRecentReports(limit);
+      return c.json(data);
+    } catch (error) {
+      console.error("Error fetching recent reports:", error);
+      return c.json(
+        { error: "Failed to fetch recent reports", message: String(error) },
+        500
+      );
+    }
+  },
 };

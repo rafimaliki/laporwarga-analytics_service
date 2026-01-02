@@ -8,7 +8,7 @@ import {
   dimCity,
   bridgeReportReporter,
 } from "@/db/schema";
-import { eq, sql, and, gte, lte, count, avg } from "drizzle-orm";
+import { eq, sql, and, gte, lte, count, avg, desc } from "drizzle-orm";
 
 export interface DateRangeFilter {
   startDate?: Date;
@@ -523,4 +523,29 @@ export async function getReportTypeDistributionData(
     escalated: Number(row.escalated),
     total: Number(row.total),
   }));
+}
+
+// ============================================
+// Recent Reports Query
+// ============================================
+
+export async function getRecentReports(limit: number = 10) {
+  const rows = await db
+    .select({
+      reportId: factReports.reportId,
+      title: factReports.title,
+      createdAt: factReports.createdAt,
+      reportType: dimReportType.name,
+      currentStatus: dimStatus.name,
+      description: factReports.description,
+    })
+    .from(factReports)
+    .innerJoin(
+      dimReportType,
+      eq(factReports.reportTypeId, dimReportType.reportTypeId)
+    )
+    .innerJoin(dimStatus, eq(factReports.currentStatusId, dimStatus.statusId))
+    .orderBy(desc(factReports.createdAt))
+    .limit(limit);
+  return rows;
 }
