@@ -95,7 +95,7 @@ export const analyticsHandler = {
    * GET /api/analytics/sla-compliance
    * Returns SLA compliance statistics
    */
-  async getSLACompliance(c: Context) {
+  getSLACompliance: async (c: Context) => {
     const params: DateRangeParams = {
       startDate: c.req.query("startDate"),
       endDate: c.req.query("endDate"),
@@ -107,7 +107,7 @@ export const analyticsHandler = {
    * GET /api/analytics/mttr-by-type
    * Returns MTTR by type statistics
    */
-  async getMTTRByType(c: Context) {
+  getMTTRByType: async (c: Context) => {
     const params: DateRangeParams = {
       startDate: c.req.query("startDate"),
       endDate: c.req.query("endDate"),
@@ -119,7 +119,7 @@ export const analyticsHandler = {
    * GET /api/analytics/report-type-distribution
    * Returns report type distribution statistics
    */
-  async getReportTypeDistribution(c: Context) {
+  getReportTypeDistribution: async (c: Context) => {
     const params: DateRangeParams = {
       startDate: c.req.query("startDate"),
       endDate: c.req.query("endDate"),
