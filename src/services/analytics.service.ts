@@ -29,8 +29,12 @@ import {
 
 function toDateFilter(params: DateRangeParams): DateRangeFilter {
   return {
-    startDate: params.startDate ? new Date(params.startDate) : undefined,
-    endDate: params.endDate ? new Date(params.endDate) : undefined,
+    startDate: params.startDate
+      ? new Date(params.startDate + "T00:00:00.000Z")
+      : undefined,
+    endDate: params.endDate
+      ? new Date(params.endDate + "T23:59:59.999Z")
+      : undefined,
   };
 }
 
@@ -63,7 +67,10 @@ function calculateRankingFromDb(
       row.totalReports > 0
         ? (row.slaBreachedCount / row.totalReports) * 100
         : 0;
-    const resolutionPenalty = Math.min((avgResolutionHours / SLA_HOURS) * 20, 30);
+    const resolutionPenalty = Math.min(
+      (avgResolutionHours / SLA_HOURS) * 20,
+      30
+    );
     const score = Math.max(
       0,
       Math.round(100 - slaBreachRate * 0.3 - resolutionPenalty)
@@ -185,12 +192,15 @@ function calculateEscalationFromDb(
   };
 
   // Get last 8 months of trends (already ordered by DB)
-  const trends: EscalationTrend[] = rows.slice(0, 8).reverse().map((row) => ({
-    period: monthMap[row.month] || row.month,
-    escalated: row.escalatedCount,
-    rejected: row.rejectedCount,
-    resolved: row.resolvedCount,
-  }));
+  const trends: EscalationTrend[] = rows
+    .slice(0, 8)
+    .reverse()
+    .map((row) => ({
+      period: monthMap[row.month] || row.month,
+      escalated: row.escalatedCount,
+      rejected: row.rejectedCount,
+      resolved: row.resolvedCount,
+    }));
 
   return {
     stats,
@@ -233,7 +243,9 @@ export const analyticsService = {
       updatedAt: new Date().toISOString(),
     };
   },
-   async getSLACompliance(params: DateRangeParams): Promise<SLAComplianceResponse> {
+  async getSLACompliance(
+    params: DateRangeParams
+  ): Promise<SLAComplianceResponse> {
     const filter = toDateFilter(params);
     const data = await getSLAComplianceData(filter);
     return {
@@ -251,7 +263,9 @@ export const analyticsService = {
     };
   },
 
-  async getReportTypeDistribution(params: DateRangeParams): Promise<ReportTypeDistributionResponse> {
+  async getReportTypeDistribution(
+    params: DateRangeParams
+  ): Promise<ReportTypeDistributionResponse> {
     const filter = toDateFilter(params);
     const data = await getReportTypeDistributionData(filter);
     return {

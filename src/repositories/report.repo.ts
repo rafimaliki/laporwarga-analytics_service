@@ -6,6 +6,7 @@ import {
   dimStatus,
   dimReportType,
   dimCity,
+  bridgeReportReporter,
 } from "@/db/schema";
 import { eq, sql, and, gte, lte, count, avg } from "drizzle-orm";
 
@@ -53,7 +54,10 @@ export async function getHeatmapData(
       province: dimCity.province,
     })
     .from(factReports)
-    .innerJoin(dimReportType, eq(factReports.reportTypeId, dimReportType.reportTypeId))
+    .innerJoin(
+      dimReportType,
+      eq(factReports.reportTypeId, dimReportType.reportTypeId)
+    )
     .leftJoin(dimCity, eq(factReports.cityId, dimCity.cityId))
     .where(whereClause);
 
@@ -85,19 +89,22 @@ export async function getRankingData(
 
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
-  const andClause = whereParts.length > 0 ? `AND ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+  const andClause =
+    whereParts.length > 0 ? `AND ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     WITH report_resolution AS (
       SELECT 
         fr.report_id,
@@ -142,13 +149,17 @@ export async function getRankingData(
     SELECT * FROM agency_stats
     WHERE agency != 'Belum Ditugaskan'
     ORDER BY total_reports DESC
-  `, [...params, SLA_HOURS]);
+  `,
+    [...params, SLA_HOURS]
+  );
 
   return result.map((row: any) => ({
     agency: row.agency,
     totalReports: Number(row.total_reports),
     resolvedCount: Number(row.resolved_count),
-    avgResolutionHours: row.avg_resolution_hours ? Number(row.avg_resolution_hours) : null,
+    avgResolutionHours: row.avg_resolution_hours
+      ? Number(row.avg_resolution_hours)
+      : null,
     slaBreachedCount: Number(row.sla_breached_count),
   }));
 }
@@ -176,18 +187,20 @@ export async function getEscalationData(
 
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     SELECT
       TO_CHAR(fr.created_at, 'Mon') as month,
       EXTRACT(YEAR FROM fr.created_at) as year,
@@ -202,7 +215,9 @@ export async function getEscalationData(
     GROUP BY month, year, month_num
     ORDER BY year DESC, month_num DESC
     LIMIT 12
-  `, params);
+  `,
+    params
+  );
 
   return result.map((row: any) => ({
     month: row.month,
@@ -224,6 +239,7 @@ export interface OverviewStats {
   resolvedReports: number;
   escalatedReports: number;
   rejectedReports: number;
+  totalUsers: number;
 }
 
 export async function getOverviewStats(
@@ -234,30 +250,38 @@ export async function getOverviewStats(
   const params: any[] = [];
   let paramIndex = 1;
 
+  console.log("Overview Stats - Filter:", filter);
+
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     SELECT
       COUNT(*) as total_reports,
       COUNT(CASE WHEN ds.name IN ('submitted', 'verified', 'in_progress') THEN 1 END) as pending_reports,
       COUNT(CASE WHEN ds.name = 'resolved' THEN 1 END) as resolved_reports,
       COUNT(CASE WHEN fr.is_escalated = true THEN 1 END) as escalated_reports,
-      COUNT(CASE WHEN ds.name = 'rejected' THEN 1 END) as rejected_reports
+      COUNT(CASE WHEN ds.name = 'rejected' THEN 1 END) as rejected_reports,
+      COUNT(DISTINCT br.reporter_id) as total_users
     FROM fact_reports fr
     JOIN dim_status ds ON fr.current_status_id = ds.status_id
+    LEFT JOIN bridge_report_reporter br ON br.report_id = fr.report_id
     ${whereClause}
-  `, params);
+  `,
+    params
+  );
 
   const row = result[0];
   return {
@@ -266,6 +290,7 @@ export async function getOverviewStats(
     resolvedReports: Number(row?.resolved_reports || 0),
     escalatedReports: Number(row?.escalated_reports || 0),
     rejectedReports: Number(row?.rejected_reports || 0),
+    totalUsers: Number(row?.total_users || 0),
   };
 }
 
@@ -291,18 +316,20 @@ export async function getSLAComplianceData(
 
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     WITH report_resolution AS (
       SELECT 
         fr.report_id,
@@ -341,7 +368,9 @@ export async function getSLAComplianceData(
     FROM agency_sla
     WHERE agency != 'Belum Ditugaskan'
     ORDER BY sla_compliance_rate DESC
-  `, [...params, SLA_HOURS]);
+  `,
+    [...params, SLA_HOURS]
+  );
 
   return result.map((row: any) => ({
     agency: row.agency,
@@ -371,18 +400,20 @@ export async function getMTTRByTypeData(
 
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     WITH report_resolution AS (
       SELECT 
         fr.report_id,
@@ -411,11 +442,15 @@ export async function getMTTRByTypeData(
     JOIN dim_report_type drt ON rr.report_type_id = drt.report_type_id
     GROUP BY drt.name
     ORDER BY avg_resolution_hours ASC NULLS LAST
-  `, params);
+  `,
+    params
+  );
 
   return result.map((row: any) => ({
     reportType: row.report_type,
-    avgResolutionHours: row.avg_resolution_hours ? Number(row.avg_resolution_hours) : null,
+    avgResolutionHours: row.avg_resolution_hours
+      ? Number(row.avg_resolution_hours)
+      : null,
     resolvedCount: Number(row.resolved_count),
     totalCount: Number(row.total_count),
   }));
@@ -445,18 +480,20 @@ export async function getReportTypeDistributionData(
 
   if (filter.startDate) {
     whereParts.push(`fr.created_at >= $${paramIndex}`);
-    params.push(filter.startDate);
+    params.push(filter.startDate.toISOString());
     paramIndex++;
   }
   if (filter.endDate) {
     whereParts.push(`fr.created_at <= $${paramIndex}`);
-    params.push(filter.endDate);
+    params.push(filter.endDate.toISOString());
     paramIndex++;
   }
 
-  const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const whereClause =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  const result = await pgClient.unsafe(`
+  const result = await pgClient.unsafe(
+    `
     SELECT
       drt.name as report_type,
       COUNT(*) as total,
@@ -472,7 +509,9 @@ export async function getReportTypeDistributionData(
     ${whereClause}
     GROUP BY drt.name
     ORDER BY total DESC
-  `, params);
+  `,
+    params
+  );
 
   return result.map((row: any) => ({
     reportType: row.report_type,
